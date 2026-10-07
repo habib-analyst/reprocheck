@@ -1,0 +1,158 @@
+# reprocheck
+
+[![CI](https://github.com/habib-analyst/reprocheck/actions/workflows/ci.yml/badge.svg)](https://github.com/habib-analyst/reprocheck/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
+**arXiv paper → reproducibility checklist, in seconds.**
+
+## The problem
+
+Peer reviewers and researchers waste hours manually auditing whether a paper's
+claims are actually reproducible: Is the dataset named? Is code available? Are
+hyperparameters, seeds, compute, and error bars reported? `reprocheck` automates
+that first pass — it fetches a paper from arXiv, scans it for reproducibility
+signals with transparent offline heuristics, and emits a structured checklist
+with a 0–100 score where every verdict cites its evidence.
+
+## Architecture
+
+```
+                        ┌──────────────────┐
+                        │   arXiv API      │  ← only network touchpoint
+                        │  (export.arxiv.  │
+                        │   org)           │
+                        └────────┬─────────┘
+                                 │ metadata (title, abstract)
+                                 ▼
+┌──────────┐   ┌──────────────────────────────────────────┐
+│ --demo   │   │           heuristic_extractor.py         │  OFFLINE
+│ fixture  │──▶│  regex/NLP-lite signal scan              │  no keys
+│ --full-  │   │  datasets · code URLs · hyperparams ·    │  no network
+│ text     │   │  seeds · compute · stats · baselines     │  deterministic
+└──────────┘   └──────────────────┬───────────────────────┘
+                                  │ findings + evidence spans
+                                  ▼
+                       ┌──────────────────────┐
+                       │    checklist.py      │  PASS / PARTIAL / MISSING
+                       │  6 categories,       │  transparent weights
+                       │  weighted 0–100      │  → 0–100 score
+                       └──────────┬───────────┘
+                                  ▼
+                       ┌──────────────────────┐
+                       │     report.py        │  Markdown + JSON
+                       └──────────────────────┘
+                                  │
+                     ┌────────────┴────────────┐
+                     │    llm_backend.py       │  OPTIONAL, opt-in via --llm
+                     │ OpenAI-compatible API  │  env: REPROCHECK_API_BASE /
+                     │ (never required)       │       REPROCHECK_API_KEY
+                     └────────────────────────┘
+
+CLI:  reprocheck 2301.12345 --full-text paper.txt --format md --out report.md
+      reprocheck --demo            # zero network, bundled sample paper
+```
+
+## Quickstart (< 5 min)
+
+```bash
+git clone https://github.com/habib-analyst/reprocheck.git
+cd reprocheck
+pip install -r requirements.txt        # only dependency: requests
+pip install pytest                    # for the test suite
+
+# Zero-network demo on the bundled sample paper:
+python -m reprocheck --demo
+
+# Audit a real arXiv paper (network only for metadata fetch):
+python -m reprocheck 2301.12345 --format md --out report.md
+
+# Include the paper's full text for a deeper scan:
+python -m reprocheck 2301.12345 --full-text paper.txt --format json
+```
+
+## Real example output
+
+`python -m reprocheck --demo` on the bundled sample paper
+(`reprocheck/fixtures/sample_paper.txt`, a MedFormer-style medical-imaging paper):
+
+```markdown
+# Reproducibility Checklist
+
+**Paper:** `demo:sample-paper`
+**Title:** MedFormer-V2: Hierarchical Vision Transformers for Multi-Organ Segmentation in Abdominal CT
+
+## Score: 80 / 100
+
+`[████████████████░░░░]` 80/100
+
+## Checklist
+
+| Category | Verdict | Points | Notes |
+|----------|---------|--------|-------|
+| Data | ✅ PASS | 20/20 | Named dataset(s): BTCV, Synapse. Dataset size reported. |
+| Code | ❌ MISSING | 0/20 | No code URL or code-availability statement found. |
+| Hyperparameters | ✅ PASS | 20/20 | Reported: batch size, dropout, epochs, learning rate, optimizer, scheduler, weight decay. Random seed(s) reported. |
+| Compute | ✅ PASS | 10/10 | Hardware and training time both disclosed. |
+| Evaluation rigor | ✅ PASS | 20/20 | Metrics, baseline comparisons, and statistical reporting all present. |
+| Claims | ✅ PASS | 10/10 | Quantitative claims backed by reported numbers. |
+
+## Evidence
+
+### Data
+
+> … r multi-organ segmentation in abdominal CT scans. Our model is evaluated on the Synapse multi-organ segmentation dataset (30 abdominal CT scans, 3,779 axial slices) an …
+
+### Hyperparameters
+
+> … outperforming TransUNet and Swin-UNet baselines by 2.3% Dice. We train with the AdamW optimizer using a learning rate of 1e-4 with cosine annealing, a batch size of 24, for 400 epochs. Experiments …
+
+### Compute
+
+> … All experiments were run on 4x NVIDIA A100 GPUs, with training taking approximately 36 GPU-hours per run. Statistical sign …
+
+---
+_Generated by reprocheck · 41 signals extracted · heuristics are a first pass, not a substitute for reading the paper._
+```
+
+## Scoring
+
+| Category | Weight | PASS | PARTIAL | MISSING |
+|---|---|---|---|---|
+| Data | 20 | named dataset(s) | generic data mention | nothing found |
+| Code | 20 | repo URL / availability statement | — | nothing found |
+| Hyperparameters | 20 | ≥3 of {lr, batch, epochs, optimizer, …} | 1–2 reported | nothing found |
+| Compute | 10 | hardware + training time | either one | nothing found |
+| Evaluation rigor | 20 | metrics + baselines + stats | any one | nothing found |
+| Claims | 10 | quantified claims | unquantified claims | no claims |
+
+PASS earns the full weight, PARTIAL half, MISSING zero. The score is the
+rounded sum — no hidden factors.
+
+## Tests
+
+```bash
+python -m pytest -q        # 39 tests, no network, no API keys
+```
+
+The arXiv client is tested against a canned Atom XML fixture and mocked HTTP;
+`conftest.py` hard-blocks all real network access during tests.
+
+## Roadmap
+
+- [ ] PDF ingestion (extract text from the arXiv PDF directly)
+- [ ] Checklist export for OpenReview / conference review forms
+- [ ] Reference-consistency check: do cited baselines match the claims?
+- [ ] Batch mode: audit a whole arXiv listing / conference proceedings
+- [ ] Calibration study: heuristic verdicts vs. human reviewer labels
+
+## Citation
+
+Paper metadata is retrieved via the [arXiv API](https://info.arxiv.org/help/api/)
+(`export.arxiv.org`). Please respect arXiv's
+[API usage terms](https://info.arxiv.org/help/api/tou.html) (3-second delay
+between bulk requests; this tool makes one request per invocation).
+
+## License
+
+MIT — see [LICENSE](LICENSE). © 2026 Habib Ur Rehman.
