@@ -1,0 +1,26 @@
+TITLE: MedFormer-V2: Hierarchical Vision Transformers for Multi-Organ Segmentation in Abdominal CT
+
+ABSTRACT: We propose MedFormer-V2, a hierarchical vision transformer for multi-organ segmentation
+in abdominal CT scans. Our model is evaluated on the Synapse multi-organ segmentation dataset
+(30 abdominal CT scans, 3,779 axial slices) and the BTCV benchmark, where it achieves a Dice
+score of 84.6% and a Hausdorff distance of 19.2 mm, outperforming TransUNet and Swin-UNet baselines
+by 2.3% Dice. We train with the AdamW optimizer using a learning rate of 1e-4 with cosine
+annealing, a batch size of 24, for 400 epochs. Experiments are repeated over 3 independent runs
+with different random seeds, and we report mean ± std across runs. All experiments were run on
+4x NVIDIA A100 GPUs, with training taking approximately 36 GPU-hours per run. Statistical
+significance against the strongest baseline was assessed with a paired t-test (p < 0.01).
+Our implementation builds on the public nnU-Net preprocessing pipeline.
+
+METHODS (excerpt): We preprocess all volumes with nnU-Net resampling and z-score normalization.
+The encoder uses shifted-window self-attention with patch size 4. We apply random rotation and
+elastic deformation augmentation. The model has 42M parameters. Weight decay is set to 1e-5 and
+dropout to 0.1 in the decoder. We use deep supervision with auxiliary losses at three scales.
+
+RESULTS (excerpt): On Synapse, MedFormer-V2 achieves 84.6% mean Dice (±0.4) compared to 82.3%
+for Swin-UNet and 81.1% for TransUNet. On BTCV, mean Dice is 83.9% (±0.5). Ablation studies show
+that removing hierarchical attention drops Dice by 1.8%. Error bars in all tables denote one
+standard deviation over the 3 runs.
+
+LIMITATIONS: We did not release training code or pretrained weights at the time of writing;
+reproduction requires reimplementation from the architecture description. We report results on
+two public datasets only; generalization to other anatomies is untested.
